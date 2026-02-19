@@ -1,0 +1,3 @@
+admin|admin123|System Administrator|ADMIN|admin@oceanview.com
+manager|manager123|Hotel Manager|ADMIN|manager@oceanview.com
+staff|staff123|Front Desk Staff|STAFF|staff@oceanview.com
