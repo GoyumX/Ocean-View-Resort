@@ -1,12 +1,13 @@
 # 🏖️ Ocean View Resort - Hotel Reservation Management System
 
 [![Java](https://img.shields.io/badge/Java-8+-orange.svg)](https://www.oracle.com/java/)
-[![Servlet](https://img.shields.io/badge/Servlet-4.0-blue.svg)](https://jakarta.ee/specifications/servlet/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue.svg)](https://www.mysql.com/)
+[![Servlet](https://img.shields.io/badge/Servlet-4.0-teal.svg)](https://jakarta.ee/specifications/servlet/)
 [![JSP](https://img.shields.io/badge/JSP-2.3-green.svg)](https://jakarta.ee/specifications/pages/)
 [![Tomcat](https://img.shields.io/badge/Tomcat-9.x-yellow.svg)](https://tomcat.apache.org/)
 [![License](https://img.shields.io/badge/License-MIT-red.svg)](LICENSE)
 
-A comprehensive web-based hotel reservation management system built with Java EE (Servlets & JSP) following the Model 2 (MVC) architecture pattern. Designed for hotel staff to efficiently manage room reservations, guest information, and billing operations.
+A comprehensive web-based hotel reservation management system built with Java EE (Servlets & JSP) and MySQL. Follows the Model 2 (MVC) architecture pattern. Designed for hotel staff to efficiently manage room reservations, guest information, and billing operations.
 
 
 ---
@@ -21,6 +22,7 @@ A comprehensive web-based hotel reservation management system built with Java EE
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Project Structure](#-project-structure)
+- [Database Setup](#-database-setup)
 - [Screenshots](#-screenshots)
 - [API Documentation](#-api-documentation)
 - [Testing](#-testing)
@@ -53,6 +55,7 @@ A web-based reservation management system that provides:
 - ✅ Search and filter capabilities
 - ✅ Role-based access control
 - ✅ Comprehensive reporting dashboard
+- ✅ MySQL database for reliable, scalable data persistence
 
 ---
 
@@ -117,6 +120,7 @@ Room types and rates:
 - **Java Servlets 4.0** - Request handling and control logic
 - **JSP 2.3** - Dynamic web page generation
 - **JSTL 1.2** - JSP Standard Tag Library
+- **MySQL Connector/J 8.0** - JDBC driver for database connectivity
 
 ### Frontend
 - **HTML5** - Markup
@@ -124,21 +128,21 @@ Room types and rates:
 - **JavaScript** - Client-side interactivity
 - **Responsive Design** - Mobile-first approach
 
+### Database
+- **MySQL 8.0+** - Relational database management system
+  - `users` table - User authentication and roles
+  - `reservations` table - Reservation records with full history
+
 ### Server
 - **Apache Tomcat 9.x** - Servlet container
 
 ### Build Tool
 - **Maven 3.x** - Dependency management and build automation
 
-### Data Storage
-- **File-based storage** - Text files with pipe-delimited format
-  - `users.txt` - User authentication data
-  - `reservations.txt` - Reservation records
-
 ### Development Tools
 - **IntelliJ IDEA** - Primary IDE
 - **Git** - Version control
-- **PlantUML** - Diagram generation
+- **PlantUML** - Diagram generation (optional)
 
 ---
 
@@ -166,42 +170,77 @@ The application follows the **Model 2 Architecture**, a Java EE standard pattern
 │     MODEL LAYER (Business Logic)       │
 │  • Entity classes (Reservation, User)  │
 │  • DAO classes (Data Access Objects)   │
+│  • DatabaseConfig (Connection pooling) │
 │  • Business rules and validation       │
 └─────────────┬───────────────────────────┘
-              │ File I/O
+              │ JDBC
 ┌─────────────▼───────────────────────────┐
-│     DATA LAYER (Persistence)           │
-│  • users.txt                           │
-│  • reservations.txt                    │
+│     DATA LAYER (MySQL)                 │
+│  • oceanview_resort database           │
+│  • users table                         │
+│  • reservations table                  │
 └─────────────────────────────────────────┘
 ```
 
 ### Key Architectural Decisions
 
 1. **No Framework Dependencies**: Pure Java EE implementation without Spring, Hibernate, or other frameworks
-2. **File-Based Storage**: Simple, lightweight persistence suitable for small to medium deployments
-3. **Session-Based Authentication**: Standard HTTP session management
-4. **Server-Side Rendering**: JSP-based views for broad compatibility
-5. **Separation of Concerns**: Clear layer boundaries with minimal coupling
+2. **MySQL Database**: Reliable, scalable persistence with SQL for data integrity
+3. **JDBC with PreparedStatement**: Parameterized queries for security against SQL injection
+4. **Session-Based Authentication**: Standard HTTP session management
+5. **Server-Side Rendering**: JSP-based views for broad compatibility
+6. **Separation of Concerns**: Clear layer boundaries with minimal coupling
 
 ### Design Patterns Used
 
 - **MVC (Model-View-Controller)** - Overall architecture
-- **DAO (Data Access Object)** - Data persistence abstraction
+- **DAO (Data Access Object)** - Data persistence abstraction with JDBC
 - **Singleton** - Session management
 - **Front Controller** - Servlet-based request routing
-- **Factory** - Object creation in DAOs
+- **Connection Factory** - `DatabaseConfig` for centralized connection handling
 
 ---
 
+## 📦 Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Java JDK 8** or higher
+- **Apache Maven 3.x**
+- **Apache Tomcat 9.x**
+- **MySQL Server 8.0+**
+
+---
 
 ## 🚀 Installation
+
+### Step 0: Set Up MySQL Database (Required)
+
+1. **Install MySQL** if not already installed
+   - [Download MySQL](https://dev.mysql.com/downloads/mysql/)
+
+2. **Create the database and tables** by running the schema script:
+```bash
+mysql -u root -p < database/schema.sql
+```
+
+Or using MySQL Workbench / command line:
+```sql
+SOURCE path/to/ocean-view-resort/database/schema.sql;
+```
+
+3. **Configure database credentials** in `src/main/java/com/oceanview/util/DatabaseConfig.java`:
+   - Update `DB_USERNAME` (default: `root`)
+   - Update `DB_PASSWORD` to match your MySQL root password
+   - Update `DB_URL` if using a different host/port/database name
+
+---
 
 ### Method 1: Using IntelliJ IDEA (Recommended)
 
 #### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/yourusername/ocean-view-resort.git
+git clone https://github.com/goyumx/ocean-view-resort.git
 cd ocean-view-resort
 ```
 
@@ -235,9 +274,10 @@ Or in IntelliJ:
 3. Double-click `clean` then `install`
 
 #### Step 5: Run the Application
-1. Click the green **Run** button (▶️)
-2. Wait for Tomcat to start
-3. Browser should automatically open to: `http://localhost:8080/OceanViewResort/`
+1. Ensure MySQL is running and the database is set up
+2. Click the green **Run** button (▶️)
+3. Wait for Tomcat to start
+4. Browser should automatically open to: `http://localhost:8080/OceanViewResort/`
 
 ---
 
@@ -245,7 +285,7 @@ Or in IntelliJ:
 
 #### Step 1: Clone and Build
 ```bash
-git clone https://github.com/yourusername/ocean-view-resort.git
+git clone https://github.com/goyumx/ocean-view-resort.git
 cd ocean-view-resort
 mvn clean package
 ```
@@ -281,7 +321,7 @@ Open browser to: `http://localhost:8080/OceanViewResort/`
 
 ### Default Login Credentials
 
-The system comes with three pre-configured user accounts:
+The system comes with three pre-configured user accounts (inserted by `schema.sql`):
 
 | Username | Password | Role | Access Level |
 |----------|----------|------|--------------|
@@ -354,6 +394,38 @@ The system comes with three pre-configured user accounts:
 3. Status updates immediately
 ```
 
+---
+
+## 📁 Project Structure
+
+```
+ocean-view-resort/
+├── database/
+│   └── schema.sql              # MySQL database setup script
+├── src/main/
+│   ├── java/com/oceanview/
+│   │   ├── dao/
+│   │   │   ├── ReservationDAO.java   # Reservation CRUD with MySQL
+│   │   │   └── UserDAO.java         # User CRUD & auth with MySQL
+│   │   ├── model/
+│   │   │   ├── Reservation.java     # Reservation entity
+│   │   │   └── User.java            # User entity
+│   │   ├── servlet/
+│   │   │   ├── LoginServlet.java
+│   │   │   ├── LogoutServlet.java
+│   │   │   ├── DashboardServlet.java
+│   │   │   ├── ReservationServlet.java
+│   │   │   └── HelpServlet.java
+│   │   └── util/
+│   │       └── DatabaseConfig.java  # MySQL connection configuration
+│   └── webapp/
+│       ├── WEB-INF/
+│       │   ├── web.xml
+│       │   └── views/               # JSP views
+│       └── index.jsp
+├── pom.xml
+└── README.md
+```
 
 ### Key Files Explanation
 
@@ -367,18 +439,24 @@ The system comes with three pre-configured user accounts:
   - Used for authentication and session management
 
 #### DAO Layer (`com.oceanview.dao`)
-- **ReservationDAO.java**: Handles all reservation data operations
+- **ReservationDAO.java**: Handles all reservation data operations via JDBC
   - CRUD operations (Create, Read, Update, Delete)
   - Search by guest name
   - Generate reservation numbers
-  - Calculate statistics
-  - File I/O operations
+  - Statistics and analytics
+  - Uses PreparedStatement for SQL injection prevention
   
-- **UserDAO.java**: Manages user authentication and data
+- **UserDAO.java**: Manages user authentication and data via JDBC
   - User authentication
-  - User management
-  - Default user creation
+  - User management (CRUD)
   - Password management
+  - Uses PreparedStatement for security
+
+#### Utility Layer (`com.oceanview.util`)
+- **DatabaseConfig.java**: MySQL database connection configuration
+  - JDBC connection management
+  - Configurable URL, username, password
+  - Connection test utility
 
 #### Controller Layer (`com.oceanview.servlet`)
 - **LoginServlet.java**: Handles user login
@@ -392,6 +470,46 @@ The system comes with three pre-configured user accounts:
 - Includes for reusable components (header, sidebar)
 - CSS for styling
 
+---
+
+## 🗄️ Database Setup
+
+### Schema Overview
+
+**users** table:
+| Column      | Type         | Description                |
+|-------------|--------------|----------------------------|
+| username    | VARCHAR(50)  | Primary key               |
+| password    | VARCHAR(255) | Hashed/stored password    |
+| full_name   | VARCHAR(100) | Display name              |
+| role        | VARCHAR(20)  | ADMIN or STAFF             |
+| email       | VARCHAR(100) | Optional email            |
+| created_at  | TIMESTAMP    | Creation timestamp        |
+
+**reservations** table:
+| Column             | Type          | Description                |
+|--------------------|---------------|----------------------------|
+| id                 | INT           | Auto-increment PK          |
+| reservation_number | VARCHAR(20)  | Unique (e.g., OVR0001)     |
+| guest_name         | VARCHAR(100)  | Guest full name            |
+| address            | VARCHAR(255)  | Guest address              |
+| contact_number     | VARCHAR(15)   | Phone number               |
+| room_type          | VARCHAR(20)   | SINGLE, DOUBLE, DELUXE, SUITE |
+| check_in_date      | DATE          | Check-in date              |
+| check_out_date     | DATE          | Check-out date             |
+| email              | VARCHAR(100)  | Optional email             |
+| number_of_guests   | INT           | Guest count                |
+| total_amount       | DECIMAL(10,2) | Calculated total           |
+| status             | VARCHAR(20)   | CONFIRMED, CHECKED_IN, etc.|
+| created_at         | TIMESTAMP     | Creation timestamp         |
+
+### Running the Schema
+
+```bash
+mysql -u root -p < database/schema.sql
+```
+
+This creates the `oceanview_resort` database, both tables, and inserts default users.
 
 ---
 
@@ -399,7 +517,6 @@ The system comes with three pre-configured user accounts:
 
 ### Project Maintainer
 - **Name**: Goyum Methma
-
 - **GitHub**: [@goyumx](https://github.com/goyumx)
 
 ---
@@ -408,6 +525,7 @@ The system comes with three pre-configured user accounts:
 
 - **Apache Tomcat Team** - For the excellent servlet container
 - **Oracle/Sun Microsystems** - For Java EE specifications
+- **MySQL** - For the robust relational database
 - **Maven Central** - For dependency hosting
 - **IntelliJ IDEA** - For the powerful IDE
 - **Stack Overflow Community** - For endless solutions
@@ -419,7 +537,7 @@ The system comes with three pre-configured user accounts:
 
 **Current Version**: 1.0.0  
 **Status**: Active Development  
-**Last Updated**: February 2024
+**Last Updated**: February 2025
 
 ---
 
@@ -427,30 +545,26 @@ The system comes with three pre-configured user accounts:
 
 This project was developed as part of coursework requirements:
 
-**Course**: CIS6003 Advanced Programming 
-**Institution**: Cardiff Metropolitan University
-**Semester**: S01/3 
+**Course**: CIS6003 Advanced Programming  
+**Institution**: Cardiff Metropolitan University  
+**Semester**: S01/3  
 **Assignment**: Hotel Reservation Management System  
 
 **Learning Outcomes Achieved**:
 - ✅ Java EE web application development
 - ✅ MVC architecture implementation
 - ✅ Session management and authentication
-- ✅ File-based data persistence
+- ✅ MySQL database integration and JDBC
 - ✅ Responsive web design
 - ✅ Software documentation
 
 ---
 
-
-
-
-
 ## 🎯 Quick Links
 
-- [📥 Download Latest Release](https://github.com/yourusername/ocean-view-resort/releases)
-- [🐛 Report a Bug](https://github.com/yourusername/ocean-view-resort/issues/new?template=bug_report.md)
-- [💡 Request a Feature](https://github.com/yourusername/ocean-view-resort/issues/new?template=feature_request.md)
+- [📥 Download Latest Release](https://github.com/goyumx/ocean-view-resort/releases)
+- [🐛 Report a Bug](https://github.com/goyumx/ocean-view-resort/issues/new?template=bug_report.md)
+- [💡 Request a Feature](https://github.com/goyumx/ocean-view-resort/issues/new?template=feature_request.md)
 - [📖 View Documentation](docs/)
 - [🎨 View Screenshots](screenshots/)
 
