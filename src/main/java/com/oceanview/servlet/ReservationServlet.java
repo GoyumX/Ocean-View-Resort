@@ -18,14 +18,7 @@ public class ReservationServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        String dataDirectory = getServletContext().getRealPath("/WEB-INF/data");
-        if (dataDirectory == null) {
-
-            // Fallback
-            dataDirectory = System.getProperty("java.io.tmpdir");
-            System.err.println("Warning: Could not get real path for /WEB-INF/data. Using temp directory: " + dataDirectory);
-        }
-        reservationDAO = new ReservationDAO(dataDirectory);
+        reservationDAO = new ReservationDAO();
     }
 
     @Override

@@ -11,11 +11,7 @@ public class LoginServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        String dataDirectory = getServletContext().getRealPath("/WEB-INF/data");
-        if (dataDirectory == null) {
-            dataDirectory = System.getProperty("java.io.tmpdir") + java.io.File.separator + "OceanViewResort_data";
-        }
-        userDAO = new UserDAO(dataDirectory);
+        userDAO = new UserDAO();
     }
 
     @Override

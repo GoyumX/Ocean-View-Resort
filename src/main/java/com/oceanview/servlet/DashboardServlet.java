@@ -13,8 +13,7 @@ public class DashboardServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        String dataDirectory = getServletContext().getRealPath("/WEB-INF/data");
-        reservationDAO = new ReservationDAO(dataDirectory);
+        reservationDAO = new ReservationDAO();
     }
 
     @Override
