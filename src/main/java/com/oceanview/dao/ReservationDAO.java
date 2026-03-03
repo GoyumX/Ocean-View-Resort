@@ -1,270 +1,322 @@
 package com.oceanview.dao;
 
 import com.oceanview.model.Reservation;
-import java.io.*;
+import com.oceanview.util.DatabaseConfig;
+
+import java.sql.*;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 
 public class ReservationDAO {
-    private static final String DATA_FILE = "reservations.txt";
-    private static final String DELIMITER = "\\|";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private final String dataFilePath;
-    private static final Logger LOGGER = Logger.getLogger(ReservationDAO.class.getName());
-
-
-    public ReservationDAO(String dataDirectory) {
-        this.dataFilePath = dataDirectory + File.separator + DATA_FILE;
-        initializeDataFile();
-    }
-
-    // Initialize data file if it doesn't exist
-    private void initializeDataFile() {
-        File file = new File(dataFilePath);
-        File parentDir = file.getParentFile();
-
-        if (parentDir != null && !parentDir.exists()) {
-            if (!parentDir.mkdirs()) {
-                LOGGER.warning("Failed to create directory: " + parentDir.getAbsolutePath());
-            }
-        }
-
-        if (!file.exists()) {
-            try {
-                if (!file.createNewFile()) {
-                    LOGGER.warning("Failed to create file: " + file.getAbsolutePath());
-                }
-            } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error creating data file", e);
-            }
-        }
-    }
 
     public synchronized String generateReservationNumber() {
-        String prefix = "OVR";
-        int maxNumber = 0;
+        String sql = "SELECT reservation_number FROM reservations " +
+                "WHERE reservation_number LIKE 'OVR%' " +
+                "ORDER BY id DESC LIMIT 1";
 
-        List<Reservation> reservations = getAllReservations();
-        for (Reservation res : reservations) {
-            String resNum = res.getReservationNumber();
-            if (resNum.startsWith(prefix)) {
-                try {
-                    int num = Integer.parseInt(resNum.substring(prefix.length()));
-                    if (num > maxNumber) {
-                        maxNumber = num;
-                    }
-                } catch (NumberFormatException e) {
-                    // Skip invalid numbers
-                }
+        try (Connection conn = DatabaseConfig.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            if (rs.next()) {
+                String lastNumber = rs.getString("reservation_number");
+                int number = Integer.parseInt(lastNumber.substring(3)) + 1;
+                return String.format("OVR%04d", number);
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
-        return String.format("%s%04d", prefix, maxNumber + 1);
+        return "OVR0001"; // First reservation
     }
 
-    // Add new reservation
     public boolean addReservation(Reservation reservation) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(dataFilePath, true))) {
-            String line = reservationToString(reservation);
-            writer.write(line);
-            writer.newLine();
-            return true;
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error adding reservation", e);
+        String sql = "INSERT INTO reservations " +
+                "(reservation_number, guest_name, address, contact_number, room_type, " +
+                "check_in_date, check_out_date, email, number_of_guests, total_amount, status) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, reservation.getReservationNumber());
+            pstmt.setString(2, reservation.getGuestName());
+            pstmt.setString(3, reservation.getAddress());
+            pstmt.setString(4, reservation.getContactNumber());
+            pstmt.setString(5, reservation.getRoomType());
+            pstmt.setDate(6, Date.valueOf(reservation.getCheckInDate()));
+            pstmt.setDate(7, Date.valueOf(reservation.getCheckOutDate()));
+            pstmt.setString(8, reservation.getEmail());
+            pstmt.setInt(9, reservation.getNumberOfGuests());
+            pstmt.setDouble(10, reservation.getTotalAmount());
+            pstmt.setString(11, reservation.getStatus());
+
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
             return false;
         }
     }
 
-    // Get reservation by reservation number
+
+    //Get reservation by reservation number
     public Reservation getReservation(String reservationNumber) {
-        List<Reservation> reservations = getAllReservations();
-        for (Reservation res : reservations) {
-            if (res.getReservationNumber().equalsIgnoreCase(reservationNumber)) {
-                return res;
+        String sql = "SELECT * FROM reservations WHERE reservation_number = ?";
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, reservationNumber);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return extractReservationFromResultSet(rs);
+                }
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
+
         return null;
     }
 
-    // Get all reservations
+     //Get all reservations
     public List<Reservation> getAllReservations() {
         List<Reservation> reservations = new ArrayList<>();
+        String sql = "SELECT * FROM reservations ORDER BY created_at DESC";
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(dataFilePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-                    Reservation reservation = stringToReservation(line);
-                    if (reservation != null) {
-                        reservations.add(reservation);
-                    }
-                }
+        try (Connection conn = DatabaseConfig.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                reservations.add(extractReservationFromResultSet(rs));
             }
-        } catch (FileNotFoundException e) {
-            // File doesn't exist yet, return empty list
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error reading reservations", e);
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
         return reservations;
     }
 
     // Update reservation
-    public boolean updateReservation(Reservation updatedReservation) {
-        List<Reservation> reservations = getAllReservations();
-        boolean found = false;
+    public boolean updateReservation(Reservation reservation) {
+        String sql = "UPDATE reservations SET " +
+                "guest_name = ?, address = ?, contact_number = ?, room_type = ?, " +
+                "check_in_date = ?, check_out_date = ?, email = ?, number_of_guests = ?, " +
+                "total_amount = ?, status = ? " +
+                "WHERE reservation_number = ?";
 
-        for (int i = 0; i < reservations.size(); i++) {
-            if (reservations.get(i).getReservationNumber()
-                    .equalsIgnoreCase(updatedReservation.getReservationNumber())) {
-                reservations.set(i, updatedReservation);
-                found = true;
-                break;
-            }
-        }
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-        if (found) {
-            return saveAllReservations(reservations);
-        }
-        return false;
-    }
+            pstmt.setString(1, reservation.getGuestName());
+            pstmt.setString(2, reservation.getAddress());
+            pstmt.setString(3, reservation.getContactNumber());
+            pstmt.setString(4, reservation.getRoomType());
+            pstmt.setDate(5, Date.valueOf(reservation.getCheckInDate()));
+            pstmt.setDate(6, Date.valueOf(reservation.getCheckOutDate()));
+            pstmt.setString(7, reservation.getEmail());
+            pstmt.setInt(8, reservation.getNumberOfGuests());
+            pstmt.setDouble(9, reservation.getTotalAmount());
+            pstmt.setString(10, reservation.getStatus());
+            pstmt.setString(11, reservation.getReservationNumber());
 
-    // Delete reservation
-    public boolean deleteReservation(String reservationNumber) {
-        List<Reservation> reservations = getAllReservations();
-        boolean removed = reservations.removeIf(res ->
-                res.getReservationNumber().equalsIgnoreCase(reservationNumber));
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
 
-        if (removed) {
-            return saveAllReservations(reservations);
-        }
-        return false;
-    }
-
-    // Search reservations by guest name
-    public List<Reservation> searchByGuestName(String guestName) {
-        List<Reservation> results = new ArrayList<>();
-        List<Reservation> allReservations = getAllReservations();
-
-        for (Reservation res : allReservations) {
-            if (res.getGuestName().toLowerCase().contains(guestName.toLowerCase())) {
-                results.add(res);
-            }
-        }
-
-        return results;
-    }
-
-    // Get active reservations (checked dayyyy)
-    public List<Reservation> getActiveReservations() {
-        List<Reservation> results = new ArrayList<>();
-        List<Reservation> allReservations = getAllReservations();
-        LocalDate today = LocalDate.now();
-
-        for (Reservation res : allReservations) {
-            if (res.getStatus().equals("CHECKED_IN") ||
-                    (res.getStatus().equals("CONFIRMED") &&
-                            !res.getCheckInDate().isAfter(today) &&
-                            !res.getCheckOutDate().isBefore(today))) {
-                results.add(res);
-            }
-        }
-
-        return results;
-    }
-
-    private String reservationToString(Reservation res) {
-        return String.join("|",
-                res.getReservationNumber(),
-                res.getGuestName(),
-                res.getAddress(),
-                res.getContactNumber(),
-                res.getRoomType(),
-                res.getCheckInDate().format(DATE_FORMATTER),
-                res.getCheckOutDate().format(DATE_FORMATTER),
-                res.getEmail() != null ? res.getEmail() : "",
-                String.valueOf(res.getNumberOfGuests()),
-                String.valueOf(res.getTotalAmount()),
-                res.getStatus()
-        );
-    }
-
-    private Reservation stringToReservation(String line) {
-        try {
-            String[] parts = line.split(DELIMITER);
-            if (parts.length >= 11) {
-                Reservation res = new Reservation();
-                res.setReservationNumber(parts[0]);
-                res.setGuestName(parts[1]);
-                res.setAddress(parts[2]);
-                res.setContactNumber(parts[3]);
-                res.setRoomType(parts[4]);
-                res.setCheckInDate(LocalDate.parse(parts[5], DATE_FORMATTER));
-                res.setCheckOutDate(LocalDate.parse(parts[6], DATE_FORMATTER));
-                res.setEmail(parts[7].isEmpty() ? null : parts[7]);
-                res.setNumberOfGuests(Integer.parseInt(parts[8]));
-                res.setTotalAmount(Double.parseDouble(parts[9]));
-                res.setStatus(parts[10]);
-                return res;
-            }
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error parsing reservation from string", e);
-        }
-        return null;
-    }
-
-    private boolean saveAllReservations(List<Reservation> reservations) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(dataFilePath))) {
-            for (Reservation res : reservations) {
-                writer.write(reservationToString(res));
-                writer.newLine();
-            }
-            return true;
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Error saving all reservations", e);
+        } catch (SQLException e) {
+            e.printStackTrace();
             return false;
         }
     }
 
-    public Map<String, Object> getStatistics() {
-        Map<String, Object> stats = new HashMap<>();
-        List<Reservation> allReservations = getAllReservations();
+     //Delete reservation
 
-        int totalReservations = allReservations.size();
-        int activeReservations = 0;
-        int confirmedReservations = 0;
-        int checkedOutReservations = 0;
-        int cancelledReservations = 0;
-        double totalRevenue = 0;
+    public boolean deleteReservation(String reservationNumber) {
+        String sql = "DELETE FROM reservations WHERE reservation_number = ?";
 
-        for (Reservation res : allReservations) {
-            switch (res.getStatus()) {
-                case "CHECKED_IN":
-                    activeReservations++;
-                    break;
-                case "CONFIRMED":
-                    confirmedReservations++;
-                    break;
-                case "CHECKED_OUT":
-                    checkedOutReservations++;
-                    totalRevenue += res.getTotalAmount();
-                    break;
-                case "CANCELLED":
-                    cancelledReservations++;
-                    break;
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, reservationNumber);
+
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Search reservations by guest name
+
+    public List<Reservation> searchByGuestName(String guestName) {
+        List<Reservation> reservations = new ArrayList<>();
+        String sql = "SELECT * FROM reservations WHERE guest_name LIKE ? ORDER BY created_at DESC";
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, "%" + guestName + "%");
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    reservations.add(extractReservationFromResultSet(rs));
+                }
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
-        stats.put("totalReservations", totalReservations);
-        stats.put("activeReservations", activeReservations);
-        stats.put("confirmedReservations", confirmedReservations);
-        stats.put("checkedOutReservations", checkedOutReservations);
-        stats.put("cancelledReservations", cancelledReservations);
-        stats.put("totalRevenue", totalRevenue);
+        return reservations;
+    }
+
+    // Get reservations by date range
+
+    public List<Reservation> getReservationsByDateRange(LocalDate startDate, LocalDate endDate) {
+        List<Reservation> reservations = new ArrayList<>();
+        String sql = "SELECT * FROM reservations " +
+                "WHERE check_in_date >= ? AND check_out_date <= ? " +
+                "ORDER BY check_in_date";
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setDate(1, Date.valueOf(startDate));
+            pstmt.setDate(2, Date.valueOf(endDate));
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    reservations.add(extractReservationFromResultSet(rs));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return reservations;
+    }
+
+    //Get active reservations
+    public List<Reservation> getActiveReservations() {
+        List<Reservation> reservations = new ArrayList<>();
+        String sql = "SELECT * FROM reservations " +
+                "WHERE status IN ('CONFIRMED', 'CHECKED_IN') " +
+                "AND check_out_date >= CURDATE() " +
+                "ORDER BY check_in_date";
+
+        try (Connection conn = DatabaseConfig.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                reservations.add(extractReservationFromResultSet(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return reservations;
+    }
+
+    //Get statistics for dashboard
+    public Map<String, Object> getStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        try (Connection conn = DatabaseConfig.getConnection()) {
+
+            // Total reservations
+            String sql1 = "SELECT COUNT(*) as total FROM reservations";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql1)) {
+                if (rs.next()) {
+                    stats.put("totalReservations", rs.getInt("total"));
+                }
+            }
+
+            // Active reservations
+            String sql2 = "SELECT COUNT(*) as active FROM reservations WHERE status = 'CHECKED_IN'";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql2)) {
+                if (rs.next()) {
+                    stats.put("activeReservations", rs.getInt("active"));
+                }
+            }
+
+            // Confirmed reservations
+            String sql3 = "SELECT COUNT(*) as confirmed FROM reservations WHERE status = 'CONFIRMED'";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql3)) {
+                if (rs.next()) {
+                    stats.put("confirmedReservations", rs.getInt("confirmed"));
+                }
+            }
+
+            // Checked out reservations
+            String sql4 = "SELECT COUNT(*) as checkedOut FROM reservations WHERE status = 'CHECKED_OUT'";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql4)) {
+                if (rs.next()) {
+                    stats.put("checkedOutReservations", rs.getInt("checkedOut"));
+                }
+            }
+
+            // Cancelled reservations
+            String sql5 = "SELECT COUNT(*) as cancelled FROM reservations WHERE status = 'CANCELLED'";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql5)) {
+                if (rs.next()) {
+                    stats.put("cancelledReservations", rs.getInt("cancelled"));
+                }
+            }
+
+            // Total revenue
+            String sql6 = "SELECT SUM(total_amount) as revenue FROM reservations WHERE status = 'CHECKED_OUT'";
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql6)) {
+                if (rs.next()) {
+                    double revenue = rs.getDouble("revenue");
+                    stats.put("totalRevenue", revenue);
+                } else {
+                    stats.put("totalRevenue", 0.0);
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            stats.put("totalReservations", 0);
+            stats.put("activeReservations", 0);
+            stats.put("confirmedReservations", 0);
+            stats.put("checkedOutReservations", 0);
+            stats.put("cancelledReservations", 0);
+            stats.put("totalRevenue", 0.0);
+        }
 
         return stats;
+    }
+
+    //Extract Reservation object from ResultSet
+    private Reservation extractReservationFromResultSet(ResultSet rs) throws SQLException {
+        Reservation reservation = new Reservation();
+        reservation.setReservationNumber(rs.getString("reservation_number"));
+        reservation.setGuestName(rs.getString("guest_name"));
+        reservation.setAddress(rs.getString("address"));
+        reservation.setContactNumber(rs.getString("contact_number"));
+        reservation.setRoomType(rs.getString("room_type"));
+        reservation.setCheckInDate(rs.getDate("check_in_date").toLocalDate());
+        reservation.setCheckOutDate(rs.getDate("check_out_date").toLocalDate());
+        reservation.setEmail(rs.getString("email"));
+        reservation.setNumberOfGuests(rs.getInt("number_of_guests"));
+        reservation.setTotalAmount(rs.getDouble("total_amount"));
+        reservation.setStatus(rs.getString("status"));
+        return reservation;
     }
 }
